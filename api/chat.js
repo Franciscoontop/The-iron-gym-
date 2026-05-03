@@ -60,32 +60,21 @@ export default async function handler(req) {
       6. Be extremely polite and very concise.
     `;
 
-    const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.NVIDIA_API_KEY}`,
-        "Content-Type": "application/json",
+   const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.NVIDIA_API_KEY}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    model: "meta/llama-3.1-405b-instruct",
+    messages: [
+      { 
+        role: "system", 
+        content: `You are the AI assistant for a business. Use the following DATABASE to answer questions. If the info isn't there, tell them to book a tour. 
+        
+        DATABASE: ${sheetData}` // This line is what makes it "Smart"
       },
-      body: JSON.stringify({
-        model: "meta/llama-3.1-8b-instruct",
-        messages: [{ role: "system", content: systemPrompt }, ...messages],
-        stream: true, 
-        temperature: 0.4, 
-        max_tokens: 200   
-      }),
-    });
-
-    if (!response.ok) return new Response("NVIDIA Error", { status: response.status });
-
-    return new Response(response.body, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-      },
-    });
-
-  } catch (e) {
-    return new Response("Internal Error", { status: 500 });
-  }
-}
+      ...messages
+    ],
+    // ... rest of your code
