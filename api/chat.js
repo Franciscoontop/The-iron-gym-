@@ -69,7 +69,7 @@ export default async function handler(req) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "meta/llama-3.1-405b-instruct",
+        model: "meta/llama-3.1-70b-instruct",
         messages: [
           { role: "system", content: systemPrompt },
           ...messages
