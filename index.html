@@ -1201,27 +1201,30 @@
   let messages = [];
 
   // Function to Send Message to your Vercel API
-  async function sendMessage() {
-    const input = document.getElementById('chat-input');
-    const msgContainer = document.getElementById('chat-messages');
-    if (!input.value) return;
-
-    const userMsg = input.value;
-    input.value = '';
-    
-    // Display User Message
-    msgContainer.innerHTML += `<div style="margin-bottom:10px; text-align:right;"><strong>You:</strong> ${userMsg}</div>`;
-    messages.push({ role: 'user', content: userMsg });
-
-    // Call your Vercel API
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        messages: messages,
-        sheetData: "Founder: Tank Reed, Price: $85/mo, Policy: No Chalk Limits" // You can dynamically pull this from your Google Sheet script
-      })
-    });
+  while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+      
+      lines.forEach(line => {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.replace('data: ', '').trim();
+          if (dataStr === '[DONE]') return;
+          
+          try {
+            const parsed = JSON.parse(dataStr);
+            const content = parsed.choices[0].delta.content || "";
+            aiMsg += content;
+            aiSpan.innerText = aiMsg;
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+          } catch (e) {
+            // Ignore incomplete chunks
+          }
+        }
+      });
+    }
 
     const data = await response.body;
     const reader = data.getReader();
