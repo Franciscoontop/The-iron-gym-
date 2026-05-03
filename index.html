@@ -1172,5 +1172,81 @@
     });
   });
 </script>
+
+<div id="chat-widget" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;">
+  <button id="chat-button" style="background: #FF0000; color: white; border: none; padding: 15px 20px; border-radius: 50px; cursor: pointer; font-family: 'Oswald', sans-serif; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+    CHAT WITH TANK 💬
+  </button>
+  
+  <div id="chat-window" style="display: none; position: absolute; bottom: 70px; right: 0; width: 350px; height: 450px; background: #1a1a1a; border: 1px solid #333; border-radius: 10px; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <div style="background: #333; padding: 15px; color: white; font-family: 'Oswald', sans-serif; display: flex; justify-content: space-between;">
+      <span>IRON DEN AI</span>
+      <button onclick="document.getElementById('chat-window').style.display='none'" style="background:none; border:none; color:white; cursor:pointer;">✕</button>
+    </div>
+    <div id="chat-messages" style="flex: 1; padding: 15px; overflow-y: auto; color: #ccc; font-family: 'Barlow Condensed', sans-serif; font-size: 1.1rem;"></div>
+    <div style="padding: 10px; background: #222; display: flex;">
+      <input type="text" id="chat-input" placeholder="Ask about memberships..." style="flex: 1; background: #111; border: 1px solid #444; color: white; padding: 10px; border-radius: 5px;">
+      <button id="send-chat" style="background: #FF0000; border: none; color: white; padding: 0 15px; margin-left: 5px; border-radius: 5px; cursor: pointer;">Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Chat Widget Toggle
+  const chatBtn = document.getElementById('chat-button');
+  const chatWindow = document.getElementById('chat-window');
+  chatBtn.onclick = () => chatWindow.style.display = chatWindow.style.display === 'none' ? 'flex' : 'none';
+
+  // State
+  let messages = [];
+
+  // Function to Send Message to your Vercel API
+  async function sendMessage() {
+    const input = document.getElementById('chat-input');
+    const msgContainer = document.getElementById('chat-messages');
+    if (!input.value) return;
+
+    const userMsg = input.value;
+    input.value = '';
+    
+    // Display User Message
+    msgContainer.innerHTML += `<div style="margin-bottom:10px; text-align:right;"><strong>You:</strong> ${userMsg}</div>`;
+    messages.push({ role: 'user', content: userMsg });
+
+    // Call your Vercel API
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        messages: messages,
+        sheetData: "Founder: Tank Reed, Price: $85/mo, Policy: No Chalk Limits" // You can dynamically pull this from your Google Sheet script
+      })
+    });
+
+    const data = await response.body;
+    const reader = data.getReader();
+    const decoder = new TextDecoder();
+    let aiMsg = "";
+    
+    // Render AI Message (Streaming)
+    msgContainer.innerHTML += `<div><strong>Tank:</strong> <span id="current-ai">...</span></div>`;
+    const aiSpan = document.getElementById('current-ai');
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value);
+      aiMsg += chunk;
+      aiSpan.innerText = aiMsg;
+      msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
+    
+    aiSpan.removeAttribute('id');
+    messages.push({ role: 'assistant', content: aiMsg });
+  }
+
+  document.getElementById('send-chat').onclick = sendMessage;
+  document.getElementById('chat-input').onkeypress = (e) => { if(e.key === 'Enter') sendMessage(); };
+</script> 
 </body>
 </html>
