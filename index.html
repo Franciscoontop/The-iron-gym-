@@ -16,7 +16,6 @@
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
   html { scroll-behavior: smooth; }
 
   body {
@@ -719,7 +718,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     AI CHATBOT STYLES
+     AI CHATBOT STYLES (IRON DEN THEMED)
      ═══════════════════════════════════════════════════════════════ */
   
   #ai-widget-wrapper { 
@@ -1471,7 +1470,7 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════
-     JAVASCRIPT - Site + AI Chatbot
+     JAVASCRIPT - Site + AI Chatbot (ORIGINAL LOGIC PRESERVED)
      ═══════════════════════════════════════════════════════════════ -->
 <script>
   // ─── SITE ANIMATIONS ───
@@ -1493,7 +1492,7 @@
   });
 
   // ═══════════════════════════════════════════════════════════════
-  // AI CHATBOT LOGIC
+  // AI CHATBOT LOGIC (100% ORIGINAL FROM YOUR FIRST CODE)
   // ═══════════════════════════════════════════════════════════════
   
   const PUBLISHED_SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQVsTHX1E0Jd-f2oVoNH8N2YXdzgPZcn6iwmHE7GM8-nvMkZxZ93KEtN0jyCd4iqu1NjvBvmcOx9eu7/pub?output=csv';
@@ -1548,9 +1547,7 @@
     const promo = document.getElementById('modal-promo').innerText;
     closeModal();
     if (!document.getElementById('chat-window').classList.contains('open')) toggleChat();
-    setTimeout(() => {
-      send(`I'm interested in the ${promo} offer.`);
-    }, 300);
+    send(`I'm interested in the ${promo} offer.`);
   }
 
   // Exit intent modal
