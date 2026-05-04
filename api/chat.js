@@ -1,5 +1,6 @@
 export const config = {
-  runtime: 'edge', 
+  runtime: 'edge',
+  maxDuration: 60, // Extend Vercel edge timeout to 60 seconds
 };
 
 const ZAPIER_WEBHOOK_URL = "https://hooks.zapier.com/hooks/catch/27378409/uvcaj3c/";
@@ -16,10 +17,9 @@ export default async function handler(req) {
     // --- 1. DATA DETECTION PATTERNS ---
     const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
     const phonePattern = /\b\d{3}[-.]\d{3}[-.]\d{4}\b/;
-    
+
     const userMessages = messages.filter(m => m.role === 'user').map(m => m.content).join(" ");
     const nameMatch = userMessages.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b/);
-
     const hasEmail = emailPattern.test(allMessagesText);
     const hasPhone = phonePattern.test(allMessagesText);
     const hasFullName = nameMatch !== null;
@@ -30,7 +30,6 @@ export default async function handler(req) {
 
     if (isLeadComplete && !alreadySent) {
       messages[messages.length - 1].zapierTriggered = true;
-
       fetch(ZAPIER_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -46,7 +45,6 @@ export default async function handler(req) {
 
     // --- 3. THE IRON DEN PERSONA & SYSTEM PROMPT ---
     const currentSheetData = sheetData || "No data provided";
-
     const systemPrompt = `
       ROLE: You are the AI assistant for The Iron Den, a gritty, premium black-iron gym in the South Bronx.
       PERSONALITY: Direct, motivating, and efficient. No fluff. Talk like a retired heavyweight boxer.
@@ -58,10 +56,11 @@ export default async function handler(req) {
       3. PROMO CODE: If they ask for a free pass or deal, mention the code 'STEEL' for a free day pass, BUT only after you have their Full Name, Email, and Phone.
       4. UPSELL: If they ask about the $85/mo membership, mention the $1,200 Elite Strength Coaching.
       5. CHALK/WEIGHTS: Chalk is encouraged. Dropping weights is allowed if earned. No Yoga, Pilates, or Zumba.
-      6. CONSTRAINT: Keep every response to MAX 2 short, punchy sentences.
+      6. RESPONSES: Keep responses punchy and direct — but ALWAYS finish your complete thought. Never cut off mid-sentence. 2-4 sentences max.
       7. NON-DATABASE QUESTIONS: If the answer isn't in the database, tell them to book a tour during staffed hours (Mon-Fri 4-8 PM).
     `;
 
+    // --- 4. CALL NVIDIA / LLAMA API ---
     const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -74,7 +73,9 @@ export default async function handler(req) {
           { role: "system", content: systemPrompt },
           ...messages
         ],
-        stream: true // Enabled for that "typing" effect on your site
+        max_tokens: 300,  // FIX: was missing — model was defaulting to ~50-100 tokens and cutting off
+        stream: true,
+        temperature: 0.7, // Keeps responses consistent but not robotic
       }),
     });
 
