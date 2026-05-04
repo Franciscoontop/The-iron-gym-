@@ -1,8 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!--
+    ╔═══════════════════════════════════════════════════════╗
+    ║  Project : The Iron Den — South Bronx 24/7 Gym       ║
+    ║  File    : index.html                                 ║
+    ║  Created : October 24, 2023                           ║
+    ║  Updated : October 24, 2023                           ║
+    ║  Author  : [Your Name]                                ║
+    ║  Notes   : Chat widget integrated with Vercel API     ║
+    ║  API URL : https://the-iron-gym-five.vercel.app      ║
+    ╚═══════════════════════════════════════════════════════╝
+-->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="revised" content="2023-10-24" />
 <title>The Iron Den — South Bronx's Only 24/7 Black-Iron Gym</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;0,900;1,700&family=Oswald:wght@400;500;700&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet"/>
 <style>
@@ -611,7 +623,6 @@
     gap: 3rem;
     align-items: start;
   }
-  .footer-brand {}
   .footer-logo {
     font-family: 'Barlow Condensed', sans-serif;
     font-weight: 900;
@@ -1153,6 +1164,7 @@
   <p style="color:#555;font-size:0.68rem;">Text <span style="color:var(--red)">POWER</span> to 718-555-9012 to book</p>
 </div>
 
+<!-- ─── SCROLL REVEAL & NAV HIGHLIGHT ─── -->
 <script>
   // Scroll reveal
   const reveals = document.querySelectorAll('.reveal');
@@ -1173,11 +1185,12 @@
   });
 </script>
 
+<!-- ─── CHAT WIDGET ─── -->
 <div id="chat-widget" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;">
   <button id="chat-button" style="background: #FF0000; color: white; border: none; padding: 15px 20px; border-radius: 50px; cursor: pointer; font-family: 'Oswald', sans-serif; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
     CHAT WITH TANK 💬
   </button>
-  
+
   <div id="chat-window" style="display: none; position: absolute; bottom: 70px; right: 0; width: 350px; height: 450px; background: #1a1a1a; border: 1px solid #333; border-radius: 10px; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
     <div style="background: #333; padding: 15px; color: white; font-family: 'Oswald', sans-serif; display: flex; justify-content: space-between;">
       <span>IRON DEN AI</span>
@@ -1192,64 +1205,112 @@
 </div>
 
 <script>
-  // Chat Widget Toggle
+  /*
+   * ─────────────────────────────────────────────
+   *  Chat Widget — Connected to Vercel API
+   *  Created : October 24, 2023
+   *  Updated : October 24, 2023
+   *  API     : https://the-iron-gym-five.vercel.app
+   * ─────────────────────────────────────────────
+   */
+
+  // Toggle chat window
   const chatBtn = document.getElementById('chat-button');
   const chatWindow = document.getElementById('chat-window');
-  chatBtn.onclick = () => chatWindow.style.display = chatWindow.style.display === 'none' ? 'flex' : 'none';
+  chatBtn.onclick = () => {
+    chatWindow.style.display = chatWindow.style.display === 'none' ? 'flex' : 'none';
+  };
 
-  // State
+  // Conversation state
   let messages = [];
 
-  // Function to Send Message to your Vercel API
-  while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
-      
-      lines.forEach(line => {
-        if (line.startsWith('data: ')) {
-          const dataStr = line.replace('data: ', '').trim();
-          if (dataStr === '[DONE]') return;
-          
-          try {
-            const parsed = JSON.parse(dataStr);
-            const content = parsed.choices[0].delta.content || "";
-            aiMsg += content;
-            aiSpan.innerText = aiMsg;
-            msgContainer.scrollTop = msgContainer.scrollHeight;
-          } catch (e) {
-            // Ignore incomplete chunks
-          }
-        }
+  // ── Send Message Function ──
+  async function sendMessage() {
+    const input = document.getElementById('chat-input');
+    const msgContainer = document.getElementById('chat-messages');
+    const userText = input.value.trim();
+
+    if (!userText) return;
+
+    // Add user message to conversation
+    messages.push({ role: 'user', content: userText });
+
+    // Render user message
+    msgContainer.innerHTML += `<div style="margin-bottom:10px;"><strong style="color:#FF0000;">You:</strong> ${userText}</div>`;
+    input.value = '';
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+
+    try {
+      // ✅ YOUR VERCEL API ENDPOINT
+      const API_URL = 'https://the-iron-gym-five.vercel.app/api/chat';
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messages })
       });
-    }
 
-    const data = await response.body;
-    const reader = data.getReader();
-    const decoder = new TextDecoder();
-    let aiMsg = "";
-    
-    // Render AI Message (Streaming)
-    msgContainer.innerHTML += `<div><strong>Tank:</strong> <span id="current-ai">...</span></div>`;
-    const aiSpan = document.getElementById('current-ai');
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value);
-      aiMsg += chunk;
-      aiSpan.innerText = aiMsg;
+      // Render AI message placeholder
+      const aiId = 'ai-msg-' + Date.now();
+      msgContainer.innerHTML += `<div style="margin-bottom:10px;"><strong style="color:#ccc;">Tank:</strong> <span id="${aiId}">...</span></div>`;
+      const aiSpan = document.getElementById(aiId);
+
+      // ── Stream the response ──
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let aiMsg = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        lines.forEach(line => {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.replace('data: ', '').trim();
+            if (dataStr === '[DONE]') return;
+
+            try {
+              const parsed = JSON.parse(dataStr);
+              const content = parsed.choices?.[0]?.delta?.content || '';
+              aiMsg += content;
+              aiSpan.innerText = aiMsg;
+              msgContainer.scrollTop = msgContainer.scrollHeight;
+            } catch (e) {
+              // Ignore incomplete JSON chunks
+            }
+          }
+        });
+      }
+
+      // If no streaming data came through, show the raw text
+      if (!aiMsg) {
+        aiMsg = 'Sorry, I couldn\'t process that. Try again or text POWER to 718-555-9012.';
+        aiSpan.innerText = aiMsg;
+      }
+
+      // Save AI response to conversation history
+      messages.push({ role: 'assistant', content: aiMsg });
+
+    } catch (error) {
+      console.error('Chat error:', error);
+      msgContainer.innerHTML += `<div style="margin-bottom:10px;color:#FF0000;"><strong>Error:</strong> Could not connect. Text POWER to 718-555-9012 instead.</div>`;
       msgContainer.scrollTop = msgContainer.scrollHeight;
     }
-    
-    aiSpan.removeAttribute('id');
-    messages.push({ role: 'assistant', content: aiMsg });
   }
 
+  // ── Event Listeners ──
   document.getElementById('send-chat').onclick = sendMessage;
-  document.getElementById('chat-input').onkeypress = (e) => { if(e.key === 'Enter') sendMessage(); };
-</script> 
+  document.getElementById('chat-input').onkeypress = (e) => {
+    if (e.key === 'Enter') sendMessage();
+  };
+</script>
+
 </body>
 </html>
