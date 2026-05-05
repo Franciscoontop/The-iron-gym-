@@ -14,130 +14,190 @@ export default async function handler(req) {
     const { messages, sheetData } = await req.json();
     const allMessagesText = messages.map(m => m.content).join(" ");
 
-    // --- 1. DATA DETECTION PATTERNS ---
+    // ─────────────────────────────────────────────
+    // 1. LEAD DATA DETECTION
+    // ─────────────────────────────────────────────
     const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
-    const phonePattern = /\b\d{3}[-.]\d{3}[-.]\d{4}\b/;
-
+    const phonePattern = /\b(\d{3}[\s\-.]?\d{3}[\s\-.]?\d{4})\b/;
     const userMessages = messages.filter(m => m.role === 'user').map(m => m.content).join(" ");
-    const nameMatch = userMessages.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b/);
-    const hasEmail = emailPattern.test(allMessagesText);
-    const hasPhone = phonePattern.test(allMessagesText);
+    const nameMatch    = userMessages.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b/);
+
+    const hasEmail    = emailPattern.test(allMessagesText);
+    const hasPhone    = phonePattern.test(allMessagesText);
     const hasFullName = nameMatch !== null;
-
-    // --- 2. ZAPIER TRIGGER (ONLY WHEN LEAD IS COMPLETE) ---
     const isLeadComplete = hasEmail && hasPhone && hasFullName;
-    const alreadySent = messages.slice(0, -1).some(m => m.zapierTriggered === true);
 
+    // ─────────────────────────────────────────────
+    // 2. ZAPIER TRIGGER
+    // ─────────────────────────────────────────────
+    const alreadySent = messages.slice(0, -1).some(m => m.zapierTriggered === true);
     if (isLeadComplete && !alreadySent) {
       messages[messages.length - 1].zapierTriggered = true;
       fetch(ZAPIER_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          full_name: nameMatch ? nameMatch[0] : "Check Transcript",
-          email: allMessagesText.match(emailPattern)?.[0] || "N/A",
-          phone: allMessagesText.match(phonePattern)?.[0] || "N/A",
-          service: messages.find(m => m.role === 'user' && m.content.length > 15)?.content || "Iron Den Inquiry",
-          full_transcript: messages.map(m => `${m.role}: ${m.content}`).join("\n")
+          full_name:       nameMatch ? nameMatch[0] : "Check Transcript",
+          email:           allMessagesText.match(emailPattern)?.[0] || "N/A",
+          phone:           allMessagesText.match(phonePattern)?.[0] || "N/A",
+          service:         messages.find(m => m.role === 'user' && m.content.length > 15)?.content || "Iron Den Inquiry",
+          full_transcript: messages.map(m => `${m.role}: ${m.content}`).join("\n"),
         }),
       }).catch(err => console.error("Zapier Error:", err));
     }
 
-    // --- 3. BUILD LEAD STATUS SO THE AI KNOWS WHAT IT HAS COLLECTED ---
-    // Injected into the system prompt so the model never re-asks for info
-    // it already has, and always knows what to collect next.
-    const leadStatus = `
-CURRENT LEAD STATUS:
-- Full Name: ${hasFullName ? nameMatch[0] : "NOT YET COLLECTED"}
-- Email: ${hasEmail ? allMessagesText.match(emailPattern)?.[0] : "NOT YET COLLECTED"}
-- Phone: ${hasPhone ? allMessagesText.match(phonePattern)?.[0] : "NOT YET COLLECTED"}
-- Lead Complete: ${isLeadComplete ? "YES — Zapier notified" : "NO — keep collecting missing info naturally"}
-    `.trim();
+    // ─────────────────────────────────────────────
+    // 3. LEAD STATUS FOR AI CONTEXT
+    // ─────────────────────────────────────────────
+    const leadStatus = [
+      `Full Name : ${hasFullName ? nameMatch[0]                             : "MISSING — ask for it"}`,
+      `Email     : ${hasEmail    ? allMessagesText.match(emailPattern)?.[0] : "MISSING — ask for it"}`,
+      `Phone     : ${hasPhone    ? allMessagesText.match(phonePattern)?.[0] : "MISSING — ask for it"}`,
+      `Lead done : ${isLeadComplete ? "YES — reveal STEEL code now"         : "NO — collect what is missing above"}`,
+    ].join("\n");
 
-    // --- 4. THE IRON DEN SYSTEM PROMPT ---
-    const currentSheetData = sheetData || "No data provided";
+    // ─────────────────────────────────────────────
+    // 4. SYSTEM PROMPT
+    //    Simplified for Llama — fewer rules = better compliance.
+    //    Llama struggles with long instruction lists, so we use
+    //    clear sections and explicit examples instead.
+    // ─────────────────────────────────────────────
     const systemPrompt = `
-You are the AI sales assistant for The Iron Den — a gritty, results-driven black-iron gym in the South Bronx founded by Marcus "Tank" Reed.
+You are the AI sales assistant for The Iron Den, a raw black-iron gym in the South Bronx run by Marcus "Tank" Reed.
 
-YOUR ONLY JOB: Turn every conversation into a booked tour or a signed membership. You are a closer.
+PERSONALITY: Talk like a retired heavyweight boxer. Direct, motivating, real. No fluff. Always finish your sentences completely.
 
-PERSONALITY:
-- Talk like a retired heavyweight boxer who built something real from nothing
-- Direct, confident, and motivating — not pushy or sleazy
-- Short punchy sentences. No corporate fluff. Real talk only.
+GYM FACTS:
+- Day Pass $20 | Grinder Monthly $85/mo no contract | Elite Coaching $1,200 for 12 weeks with Tank
+- Summer Shred deal: first month $50 (May only)
+- 24/7 key-fob access for members | Tours Mon-Fri 4-8 PM
+- Chalk allowed. Drop weights allowed. No yoga, pilates, or zumba.
+- Free parking on 132nd St | 718-555-9012
+- Promo code STEEL = free day pass (only share after lead is complete)
+- Extra info from our system: ${sheetData || "none"}
 
-GYM INFO FROM DATABASE:
-${currentSheetData}
-
-KEY FACTS:
-- Location: Port Morris, South Bronx
-- Hours: 24/7 for members (key-fob) | Tours: Mon–Fri 4–8 PM
-- Phone: 718-555-9012 | Text "POWER" to book
-- Founder: Marcus "Tank" Reed, competitive powerlifter
-- Plans: Day Pass $20 | Grinder Monthly $85/mo (no contract) | Elite Coaching $1,200 (12 weeks 1-on-1 with Tank)
-- Summer Shred Deal: First month only $50 — limited time
-- Chalk allowed. Drop weights allowed. NO yoga / pilates / zumba.
-- Free street parking on 132nd St
-- Promo code "STEEL" = free day pass — only reveal AFTER you have name + email + phone
-
+LEAD STATUS RIGHT NOW:
 ${leadStatus}
 
-YOUR SALES PLAYBOOK — follow this order every conversation:
+YOUR JOB - follow this flow every conversation:
+1. First message: Greet with energy and ask what they are training for. Example: "Welcome to the Den — you just found the only real gym left in the Bronx. What are you training for?" Never just say one word and stop.
+2. Find out their goal (strength, fat loss, competition, etc.) and connect it to the gym.
+3. Collect name, then email, then phone — one at a time, naturally. Never ask for something already in the lead status above.
+4. Pitch the right plan. Default is Grinder Monthly at $85. Upsell Elite Coaching for serious athletes. Use the $50 Summer deal for hesitant people.
+5. End EVERY reply with a question or next step to keep the conversation moving.
+6. Once lead is complete, give them the STEEL promo code and push to close.
 
-STEP 1 — HOOK (first message only):
-Greet with energy. Example: "Welcome to the Den — you just stepped into the right place. What are you training for?" 
-Do NOT just say "Welcome?" and stop. Always end with a question that pulls them in.
+RULES:
+- Write 2 to 4 full complete sentences every single time. Never stop mid-sentence.
+- If you do not know the answer, say: come in Mon-Fri 4-8 PM and Tank will walk you through it.
+- Never say you are an AI unless directly asked.
+`.trim();
 
-STEP 2 — QUALIFY:
-Find out their goal. Losing weight? Getting strong? Competition prep? 
-Connect their goal directly to what the Den offers. Make them feel like this gym was built for them specifically.
-
-STEP 3 — COLLECT LEAD INFO (weave in naturally, one at a time):
-You need Full Name, Email, and Phone before offering the promo or booking them.
-- First ask their name: "What's your name so I know who I'm talking to?"
-- Then email: "Drop your email and I'll send you the full breakdown"
-- Then phone: "And best number to reach you?"
-Check CURRENT LEAD STATUS above — NEVER ask for info you already have.
-
-STEP 4 — PITCH THE RIGHT PLAN:
-- Default: Grinder Monthly $85/mo — no contract, 24/7 access, chalk allowed
-- Serious athlete or competitive: upsell Elite Coaching $1,200 for 12 weeks with Tank personally
-- Hesitant or on the fence: Summer Shred deal ($50 first month) or $20 day pass to try it first
-- Once all 3 lead fields collected: reveal "STEEL" promo code for a free day pass
-
-STEP 5 — CLOSE EVERY MESSAGE:
-Always end with a question or a clear next step. Never let the conversation go quiet.
-Examples: "So what's stopping you?" / "Want me to lock in that Summer deal?" / "When can you come in this week?"
-
-HARD RULES:
-- Always finish your complete thought — NEVER cut off mid-sentence
-- 2–4 sentences per response, but make every single word count
-- If asked something not in the database: "Come in during staffed hours Mon–Fri 4–8 PM and Tank will walk you through it himself"
-- Never break character
-- Never mention you are an AI unless the user directly asks
-    `.trim();
-
-    // --- 5. CALL NVIDIA / LLAMA API ---
-    const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+    // ─────────────────────────────────────────────
+    // 5. NVIDIA / LLAMA API CALL
+    // ─────────────────────────────────────────────
+    const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.NVIDIA_API_KEY}`,
-        "Content-Type": "application/json"
+        "Content-Type":  "application/json",
       },
       body: JSON.stringify({
-        model: "meta/llama-3.1-70b-instruct",
+        model:      "meta/llama-3.1-70b-instruct",
+        max_tokens: 350,   // Enough for 2-4 complete sentences
+        temperature: 0.7,  // Consistent but not robotic
+        stream:     true,
         messages: [
           { role: "system", content: systemPrompt },
-          ...messages
+          ...messages.map(m => ({ role: m.role, content: m.content })),
         ],
-        max_tokens: 300,
-        stream: true,
-        temperature: 0.75,
       }),
     });
 
-    return new Response(response.body, {
-      headers: { 'Content-Type': 'text/event-stream' },
+    // ─────────────────────────────────────────────
+    // 6. ROBUST STREAM BUFFER
+    //
+    //    THIS IS THE KEY FIX FOR NVIDIA/LLAMA TRUNCATION.
+    //
+    //    The problem: Nvidia sends multiple SSE lines packed
+    //    into a single network chunk. The old parser split by
+    //    "\n" and tried to JSON.parse each line immediately,
+    //    but incomplete JSON (split across chunks) caused
+    //    silent parse failures — dropping most of the response.
+    //
+    //    The fix: We maintain a `buffer` string across chunks.
+    //    Each chunk is appended to the buffer, then we extract
+    //    only complete "data: ..." lines (ending in \n\n or \n).
+    //    Anything left over stays in the buffer for the next chunk.
+    //    This guarantees no data is lost due to chunk boundaries.
+    // ─────────────────────────────────────────────
+    const { readable, writable } = new TransformStream();
+    const writer  = writable.getWriter();
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    (async () => {
+      const reader = nvidiaRes.body.getReader();
+      let buffer = ""; // Holds incomplete data across chunk boundaries
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          // Append new chunk to whatever was left from last time
+          buffer += decoder.decode(value, { stream: true });
+
+          // Split on newlines and process complete lines only
+          const lines = buffer.split("\n");
+
+          // The last element may be incomplete — keep it in the buffer
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data: ")) continue;
+
+            const raw = trimmed.slice(6).trim();
+            if (!raw || raw === "[DONE]") continue;
+
+            try {
+              const parsed = JSON.parse(raw);
+              const content = parsed.choices?.[0]?.delta?.content;
+              // Only forward chunks that actually have text
+              if (content) {
+                // Re-emit in the same OpenAI SSE format the frontend expects
+                const out = { choices: [{ delta: { content } }] };
+                await writer.write(encoder.encode(`data: ${JSON.stringify(out)}\n\n`));
+              }
+            } catch (_) {
+              // Incomplete JSON — will be handled next chunk via buffer
+            }
+          }
+        }
+
+        // Flush anything still in the buffer after the stream ends
+        if (buffer.trim().startsWith("data: ")) {
+          const raw = buffer.trim().slice(6).trim();
+          if (raw && raw !== "[DONE]") {
+            try {
+              const parsed = JSON.parse(raw);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                const out = { choices: [{ delta: { content } }] };
+                await writer.write(encoder.encode(`data: ${JSON.stringify(out)}\n\n`));
+              }
+            } catch (_) {}
+          }
+        }
+
+      } finally {
+        writer.close();
+      }
+    })();
+
+    return new Response(readable, {
+      headers: { "Content-Type": "text/event-stream" },
     });
 
   } catch (error) {
